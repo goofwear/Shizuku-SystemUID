@@ -199,7 +199,7 @@ int starter_main(int argc, char *argv[]) {
     LOGE("%i", getuid());
 
     uid_t uid = getuid();
-    if (uid != 0 && uid != 2000 && uid != 1000) {
+    if (uid >= 10000) {
         perrorf("fatal: run Shizuku from non root nor adb user (uid=%d).\n", uid);
         exit(EXIT_FATAL_UID);
     }

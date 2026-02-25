@@ -1,4 +1,4 @@
 [submodule "api"]
 	path = api
-	url = git@github.com:zacharee/ShizukuHackApi.git
+	url = https://github.com/zacharee/ShizukuHackApi.git
 	branch = master

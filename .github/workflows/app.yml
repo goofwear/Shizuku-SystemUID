@@ -1,7 +1,7 @@
 name: App
 
 on:
-  workflow_dispatch:   # manual run
+  workflow_dispatch:
   push:
     paths-ignore:
       - '.github/ISSUE_TEMPLATE'
@@ -14,13 +14,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: 'recursive'
+          submodules: recursive
           fetch-depth: 0
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '21'
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Write key
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
         run: |
@@ -29,27 +34,31 @@ jobs:
           echo KEYSTORE_ALIAS_PASSWORD='${{ secrets.KEYSTORE_ALIAS_PASSWORD }}' >> signing.properties
           echo KEYSTORE_FILE=../key.jks >> signing.properties
           echo ${{ secrets.KEYSTORE }} | base64 --decode > key.jks
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           dependency-graph: generate-and-submit
           build-scan-publish: true
-          build-scan-terms-of-use-url: "https://gradle.com/terms-of-service"
-          build-scan-terms-of-use-agree: "yes"
+          build-scan-terms-of-use-url: https://gradle.com/terms-of-service
+          build-scan-terms-of-use-agree: yes
+
       - name: Build with Gradle
         id: buildWithGradle
+        env:
+          ANDROID_SDK_CHANNEL: 3
+          ORG_GRADLE_PARALLEL: true
+          ORG_GRADLE_CACHING: true
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
-          echo 'android.sdk.channel=3' >> gradle.properties
-          echo 'android.native.buildOutput=verbose' >> gradle.properties
-          echo 'org.gradle.caching=true' >> gradle.properties
-          echo 'org.gradle.parallel=true' >> gradle.properties
-          ./gradlew :manager:assemble
-          releaseName=`ls manager/build/outputs/apk/release/shizuku*-v*-release.apk | awk -F '(/|-release.apk)' '{print $6}'` && echo "releaseName=$releaseName" >> $GITHUB_OUTPUT
+          yes | sdkmanager --licenses > /dev/null || true
+          ./gradlew :manager:assembleRelease
+
+          releaseName=$(ls manager/build/outputs/apk/release/*.apk | sed 's/.*\///')
+          echo "releaseName=$releaseName" >> $GITHUB_OUTPUT
+
       - name: Upload release
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.buildWithGradle.outputs.releaseName }}
-          path: "manager/build/outputs"
+          path: manager/build/outputs
           compression-level: 9

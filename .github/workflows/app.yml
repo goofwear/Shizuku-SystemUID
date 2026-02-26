@@ -17,14 +17,33 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
+      # BUG FIX 1: The project requires Java 21, not Java 17.
+      # build.gradle declares JavaVersion.VERSION_21 and manager/build.gradle
+      # sets jvmTarget = "21". Using JDK 17 causes a compile error.
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+
+      # BUG FIX 2: Install the exact NDK, CMake, and Build Tools versions
+      # declared in build.gradle:
+      #   ndkVersion = "29.0.13113456"
+      #   buildToolsVersion = "36.0.0"
+      # and manager/build.gradle:
+      #   cmake { version = "3.31.0+" }
+      # The default GitHub runner does not include these versions.
+      - name: Install NDK, CMake, and Build Tools
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager \
+            "ndk;29.0.13113456" \
+            "cmake;3.31.6" \
+            "build-tools;36.0.0" \
+            "platforms;android-36"
 
       - name: Write key
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
@@ -43,6 +62,12 @@ jobs:
           build-scan-terms-of-use-url: https://gradle.com/terms-of-service
           build-scan-terms-of-use-agree: yes
 
+      # BUG FIX 3 & 4 are in gradle.properties (see that file):
+      #   - api_target_sdk=36  (and api_compile_sdk, api_min_sdk)
+      #     The zacharee/ShizukuHackApi submodule's api/api/build.gradle reads
+      #     these as Gradle properties. They were missing, causing:
+      #     "Could not get unknown property 'api_target_sdk'"
+      #   - org.gradle.jvmargs raised to -Xmx4096m for a build this large
       - name: Build with Gradle
         id: buildWithGradle
         env:
@@ -50,8 +75,7 @@ jobs:
           ORG_GRADLE_PARALLEL: true
           ORG_GRADLE_CACHING: true
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          ./gradlew :manager:assembleRelease
+          ./gradlew :manager:assembleRelease --stacktrace
 
           releaseName=$(ls manager/build/outputs/apk/release/*.apk | sed 's/.*\///')
           echo "releaseName=$releaseName" >> $GITHUB_OUTPUT
